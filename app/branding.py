@@ -1,0 +1,6 @@
+"""User-facing product identity; legacy storage identifiers stay unchanged."""
+DISPLAY_NAME = "Links Manga Studio"
+AUTHOR_EN = "Links Tam"
+TAGLINE_EN = "Local-first Manga Localization Studio"
+TAGLINE_ZH = "本地漫画翻译与排版工作室"
+INTERNAL_APP_ID = "Links.MangaWorkspace"

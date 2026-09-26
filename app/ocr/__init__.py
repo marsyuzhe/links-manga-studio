@@ -1,0 +1,1 @@
+"""Local, replaceable OCR pipeline."""

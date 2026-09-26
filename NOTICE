@@ -1,0 +1,17 @@
+Links Manga Studio
+Copyright 2026 Links Tam
+
+Licensed under the Apache License, Version 2.0.
+
+This product includes third-party open-source software.
+See THIRD_PARTY_NOTICES.md and MODEL_LICENSES.md for details.
+
+RapidOCR engineering components are copyright RapidOCR Authors.
+The bundled OCR weights are copyright Baidu and/or the applicable
+PaddleOCR rights holders. RapidOCR converted and packaged these weights
+as ONNX artifacts under Apache-2.0. Links Manga Studio preserves the
+artifacts without changing their bytes and does not claim their ownership.
+No upstream endorsement is implied. See licenses/RapidOCR for the
+upstream model attribution notice and exact artifact records.
+
+Other contributors retain copyright in their contributions.
