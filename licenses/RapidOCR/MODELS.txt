@@ -1,0 +1,5 @@
+RapidOCR/PaddleOCR ONNX model attribution
+Copyright Baidu and/or applicable PaddleOCR rights holders.
+Converted and packaged by RapidOCR; Apache License 2.0.
+Links Manga Studio preserves original weight bytes.
+See UPSTREAM_MODEL_LICENSES.md and root MODEL_LICENSES.md for hashes, sources and redistribution requirements.
