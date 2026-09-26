@@ -1,0 +1,118 @@
+{
+  "project_path": "<generated test project>",
+  "source_path": "<synthetic image directory>",
+  "test_pages": 1000,
+  "create_project_s": 0.042,
+  "preflight_s": 11.225,
+  "commit_s": 1.19,
+  "initial_ui_interactive_s": 0.217,
+  "page_switch_median_ms": 9.71,
+  "page_switch_max_ms": 11.76,
+  "thumbnail_files_on_open": 9,
+  "cache_budget_mb": 16,
+  "evictions": 990,
+  "memory_samples": [
+    {
+      "page": 1,
+      "rss_mb": 75.27,
+      "cache_mb": 0.75
+    },
+    {
+      "page": 100,
+      "rss_mb": 75.93,
+      "cache_mb": 1.88
+    },
+    {
+      "page": 200,
+      "rss_mb": 77.07,
+      "cache_mb": 3.0
+    },
+    {
+      "page": 300,
+      "rss_mb": 78.19,
+      "cache_mb": 4.12
+    },
+    {
+      "page": 400,
+      "rss_mb": 79.32,
+      "cache_mb": 5.25
+    },
+    {
+      "page": 500,
+      "rss_mb": 80.44,
+      "cache_mb": 6.38
+    },
+    {
+      "page": 600,
+      "rss_mb": 81.57,
+      "cache_mb": 7.5
+    },
+    {
+      "page": 700,
+      "rss_mb": 82.7,
+      "cache_mb": 8.62
+    },
+    {
+      "page": 800,
+      "rss_mb": 83.82,
+      "cache_mb": 9.75
+    },
+    {
+      "page": 900,
+      "rss_mb": 84.95,
+      "cache_mb": 10.88
+    },
+    {
+      "page": 1000,
+      "rss_mb": 85.7,
+      "cache_mb": 11.62
+    },
+    {
+      "sequential_page": 100,
+      "rss_mb": 90.21,
+      "cache_mb": 15.75
+    },
+    {
+      "sequential_page": 500,
+      "rss_mb": 90.25,
+      "cache_mb": 15.75
+    },
+    {
+      "sequential_page": 1000,
+      "rss_mb": 90.26,
+      "cache_mb": 15.75
+    }
+  ],
+  "high_resolution": [
+    {
+      "dimensions": [
+        4000,
+        6000
+      ],
+      "load_ms": 211.62,
+      "rss_mb": 161.98,
+      "cache_mb": 91.55
+    },
+    {
+      "dimensions": [
+        4000,
+        6000
+      ],
+      "load_ms": 235.16,
+      "rss_mb": 161.98,
+      "cache_mb": 91.55
+    },
+    {
+      "dimensions": [
+        4000,
+        6000
+      ],
+      "load_ms": 216.03,
+      "rss_mb": 161.98,
+      "cache_mb": 91.55
+    }
+  ],
+  "platform": "3.12.14 (main, Aug 25 2026, 14:01:42) [MSC v.1944 64 bit (AMD64)]",
+  "qt_platform": "offscreen",
+  "result": "PASS"
+}
