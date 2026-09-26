@@ -1,0 +1,54 @@
+name: Bug report
+description: Report a reproducible application problem (not a security vulnerability)
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: "Remove personal paths, logs with secrets, and copyrighted manga images before posting. Report security vulnerabilities privately using SECURITY.md."
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      placeholder: "v0.5.0"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Windows version and display scaling
+      placeholder: "Windows 11 x64, 125%"
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true
+  - type: dropdown
+    id: project_type
+    attributes:
+      label: Project type
+      options:
+        - Images
+        - PDF
+        - Mixed
+        - No project open
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual result
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Sanitized logs or synthetic-content screenshots
+      description: Optional. Do not upload user projects or copyrighted pages.
