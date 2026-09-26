@@ -1,0 +1,56 @@
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Generated builds and local development data
+build/
+dist/
+dev_data/
+temp/
+tmp/
+*.spec
+*.zip
+*.sha256
+
+# User projects and generated media
+*.lmw/
+*.sqlite3
+*.sqlite3-*
+project.json
+logs/
+cache/
+thumbnails/
+pdf_render/
+ocr/raw/
+*.log
+*.dmp
+*.mdmp
+*.stackdump
+
+# Locally downloaded OCR models and fonts
+*.onnx
+*.pdmodel
+*.pdiparams
+*.ttf
+*.otf
+*.ttc
+*.bin
+*.model
+config.json
+*.db
+
+# IDE and Windows files
+.idea/
+.vscode/
+*.user
+*.suo
+*.tmp
+*.bak
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
