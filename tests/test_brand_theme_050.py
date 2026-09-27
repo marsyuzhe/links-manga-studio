@@ -13,7 +13,7 @@ from app.ui.window import MainWindow
 
 
 def test_brand_about_and_legacy_config(qtbot, tmp_path):
-    assert __version__ == "0.5.0"
+    assert __version__ == "0.6.0"
     assert (DISPLAY_NAME, AUTHOR_EN) == ("Links Manga Studio", "Links Tam")
     config = Config(tmp_path / "LinksMangaWorkspace" / "config.json")
     window = MainWindow(ProjectService(config), tmp_path / "app.log")
@@ -22,7 +22,7 @@ def test_brand_about_and_legacy_config(qtbot, tmp_path):
     assert DISPLAY_NAME in window.windowTitle()
     about = AboutDialog(window)
     qtbot.addWidget(about)
-    assert "0.5.0" in about.version_label.text()
+    assert "0.6.0" in about.version_label.text()
     assert "Created by Links Tam" in " ".join(label.text() for label in about.findChildren(QLabel))
     assert window.author_footer.text() == "Created by Links Tam"
     project = window.service.create_project(tmp_path, "Legacy Compatible")

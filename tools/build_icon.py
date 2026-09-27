@@ -1,4 +1,4 @@
-"""Generate a temporary geometric brand icon and a genuine multi-size ICO."""
+"""Generate the original geometric application icon and its multi-size ICO."""
 from pathlib import Path
 import struct
 from PySide6.QtCore import QBuffer, QIODevice, QPointF, QRectF, Qt

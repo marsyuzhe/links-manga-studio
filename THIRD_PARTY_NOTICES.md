@@ -1,4 +1,4 @@
-# Third-party notices — v0.5.0
+# Third-party notices — shared v0.5.0 / v0.6.0 dependency inventory
 
 The project source and original assets are Apache-2.0. Dependencies retain their own terms. Versions below are from the actual Windows build environment; the installed wheel license texts and `licenses/` directory govern the exact notices. Re-audit upgrades. Model identity and licensing are documented separately in MODEL_LICENSES.md.
 
@@ -59,3 +59,7 @@ PyMuPDF has been removed from all project dependency lists and the build environ
 ## Distribution
 
 The Windows onedir package includes separate libraries and collected licenses. Root LICENSE and NOTICE do not replace LGPL/MPL/BSD/MIT or other third-party obligations. Never strip vendor notices or claim all dependencies are Apache-2.0. The public source tree contains no installed wheels, fonts, weight binaries or user data.
+
+## Unreleased AI translation source addition
+
+No additional runtime dependency or commercial provider SDK is added. HTTP uses Python `urllib`, `json`, `ssl` and concurrency primitives under the existing Python runtime license. Secrets use native Windows Credential Manager through `ctypes`; no keyring package is bundled. Ollama, LM Studio, llama.cpp and vLLM are external user-installed services; their runtimes and LLM weights are not redistributed in this release. Users must check the licenses and service terms for their chosen models/providers. The frozen 0.5.0 artifact and its dependency inventory remain unchanged.

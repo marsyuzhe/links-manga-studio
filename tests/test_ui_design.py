@@ -54,9 +54,10 @@ def test_toolbar_actions_and_translation_primary(qtbot, tmp_path):
     window.service.create_project(tmp_path, "Toolbar")
     window._project_opened()
     workspace = window.workspace
-    assert workspace.actions["pdf"] in window.toolbar.actions()
-    assert workspace.actions["erase_refill"] in window.toolbar.actions()
-    assert window.toolbar.widgetForAction(workspace.actions["erase_refill"]).property("variant") == "primary"
+    assert workspace.actions["pdf"] in window.workflow_buttons["import"][0].menu().actions()
+    assert window.translation_scope_actions["page"] in window.workflow_buttons["translation"][0].menu().actions()
+    assert workspace.actions["erase_refill"] not in window.toolbar.actions()
+    assert window.toolbar.height() == 42
     assert workspace.erase_refill_button.property("variant") == "primary"
     assert workspace.block_translation.minimumHeight() >= 100
     workspace.left_tabs.setCurrentIndex(1)
@@ -87,7 +88,7 @@ def test_settings_navigator_uses_real_preferences(qtbot, tmp_path):
     window = make_window(qtbot, tmp_path)
     dialog = SettingsDialog(window)
     qtbot.addWidget(dialog)
-    assert dialog.navigation.count() == 8
+    assert dialog.navigation.count() == 7
     dialog.simple.setChecked(False)
     assert not window.simple_action.isChecked()
     dialog.cache_size.setValue(128)

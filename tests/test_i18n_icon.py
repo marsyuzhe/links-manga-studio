@@ -102,7 +102,8 @@ def test_live_page_text_switch_keeps_project_records(qtbot, project_factory, tmp
     assert "Page Information" in window.workspace.inspector.text()
     assert "Label: Page 1" in window.workspace.inspector.text()
     assert "Page 1 / 1" in window.statusBar().currentMessage()
-    assert "第001页.png" in window.workspace.model.data(window.workspace.model.index(0), Qt.ItemDataRole.ToolTipRole)
+    assert not window.workspace.model.data(window.workspace.model.index(0), Qt.ItemDataRole.ToolTipRole)
+    assert "第001页.png" in window.workspace.inspector.text()
     row = service.connection.execute("SELECT page_uid,label FROM pages").fetchone()
     assert row["page_uid"] == "P0001" and row["label"] == "第 1 页"
     window.close()

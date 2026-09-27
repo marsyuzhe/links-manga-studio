@@ -1,135 +1,63 @@
-<p align="center"><img src="assets/icons/app_icon_128.png" width="96" alt="Links Manga Studio icon"></p>
-
 # Links Manga Studio
-
-[English](README.md) | [简体中文](README.zh-CN.md)
 
 Local-first manga OCR, translation, cleaning and typesetting studio for Windows.
 
-Created by **Links Tam**.
+Created by Links Tam.
 
-![Platform: Windows](https://img.shields.io/badge/platform-Windows-blue) ![Python: 3.11–3.12](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue) [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE)
+English | [简体中文](README.zh-CN.md)
 
-**v0.5.0 — Initial Public Release candidate.** GitHub publication is performed by the owner; no fake CI or published-release badge is shown.
+![Windows](https://img.shields.io/badge/platform-Windows-blue) ![Python](https://img.shields.io/badge/python-3.11%2B-blue) [![Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-green)](LICENSE) ![Version](https://img.shields.io/badge/version-0.6.0-grey)
 
-Local-first, manual-first and non-destructive: the built-in workflow processes pages locally without automatically uploading manga. No telemetry by default. Images and text remain in your `.lmw` project; no cloud account or translation API is required.
+Import images, folders or PDFs; review OCR, translate, clean text regions, typeset and export. **Manual translation works without an API key or a translation service.**
 
-**Contents:** [Screenshots](#screenshots) · [Features](#features) · [Quick start](#quick-start) · [Workflow](#workflow) · [Fonts](#fonts) · [Performance](#large-project-benchmark) · [Development](#development) · [Limitations](#known-limitations) · [License](#license-and-credits)
+## Workspace
 
-## Screenshots
-
-### Dark theme
-
-![Dark startup — synthetic content](docs/images/startup-dark.png)
 ![Dark workspace — synthetic content](docs/images/workspace-dark.png)
 
-### Light theme
+Pages and batches on the left, canvas in the middle, text and layout properties on the right. The workflow follows import → OCR → source export → cleaning → typesetting → export.
 
 ![Light workspace — synthetic content](docs/images/workspace-light.png)
 
-All screenshots use original synthetic demo content, not commercial manga. [Font browser](docs/ui_snapshots/0.5.0/font_browser.png) · [Quality Check](docs/ui_snapshots/0.5.0/quality_check.png)
+## Translation Center
 
-## Features
+Optional translation drafts use your own cloud API account or an external local model server. The app does not bundle an LLM or download model weights. Review drafts; existing manual translations are protected by default.
 
-### Import & projects
+![Translation Center](docs/images/translation-center.png)
 
-- PDF, images and folders; drag and drop, including direct PDF project creation.
-- Large-project lazy thumbnails, bounded image cache and batch organization.
-- Copy sources into a project or reference original paths with missing-source reporting.
+Project terminology and character notes help keep names consistent.
 
-### OCR
+![Glossary](docs/images/glossary.png)
 
-- Local RapidOCR CPU inference with bundled ONNX models.
-- OCR review, confidence information, stable Text UIDs and persisted raw results.
+## Start
 
-### Translation
+Download the Windows ZIP from this repository's **Releases** page, extract the entire folder and run **LinksMangaWorkspace.exe**. Do not run it inside the ZIP.
 
-- Manual translation in persistent text blocks.
-- DOCX export/import with stable internal field mapping rather than display headings.
+![Startup](docs/images/startup.png)
 
-### Cleaning & typesetting
+All five screenshots show original synthetic content. See [Quick start](QUICK_START.md), [user guide](USER_GUIDE.md) and [简中详细指南](docs/USER_GUIDE.zh-CN.md).
 
-- Erase, masks and Erase & Refill without deleting the TextBlock.
-- Project fonts, style roles, per-block overrides and Auto Fit.
-- Chinese punctuation-aware wrapping and editable layout.
-
-### Quality & workflow
-
-- Named Undo/Redo and Quality Check for missing translations or overflow.
-- Dark, Light and System themes; Simplified Chinese and English UI.
-- PNG/JPEG/WEBP export without an application or author watermark.
-
-## Quick start
-
-**Requirements:** Windows 10/11 x64. Portable users do not need Python. Download the latest Windows portable build from the GitHub Releases page once the owner publishes it; no repository URL is assumed here.
-
-1. Download the ZIP and its `.sha256` file; verify the checksum.
-2. Extract the entire ZIP. Keep `runtime/` beside `LinksMangaWorkspace.exe`.
-3. Run the EXE. Its legacy filename preserves compatibility; the product is Links Manga Studio.
-4. Drop a PDF, image or image folder into the startup window.
-5. Run OCR and review the original text.
-6. Enter translations locally or exchange DOCX batches.
-7. Use Erase & Refill, then Quality Check.
-8. Export finished pages.
-
-Copy Into Project keeps sources inside `.lmw`; Reference Original Files records paths and hashes. Back up your project and external referenced files.
-
-## Workflow
-
-Import → OCR → Translate → Erase & Refill → Quality Check → Export
-
-Erase retains the same Text UID, translation and styles. The project uses SQLite and immediate transactions for core edits. See [Architecture](docs/ARCHITECTURE.md).
-
-## Fonts
-
-Project Font Styles define reusable roles; Similar Font Recommendation offers visual matches. Rasterized manga generally does not preserve exact source font metadata, so this is visual recommendation, not exact font recovery. User-installed fonts are not redistributed with this project.
-
-## Large project benchmark
-
-An **internal synthetic 1,000-page image benchmark** previously measured preflight around 11.225 s, database commit 1.19 s, initial interactive UI 0.217 s and sampled page-switch median 9.71 ms. A 16 MB cache stress test remained bounded. These are historical measurements, not universal promises; hardware, source resolution and environment affect results. The heavy benchmark was not repeated for documentation changes.
-
-## Development
-
-Python 3.11 or 3.12 on Windows:
+Source development:
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e ".[test,imaging]"
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e ".[imaging,test]"
 .\.venv\Scripts\python.exe -m app.main
 ```
 
-### Tests
+The tested release build uses Python 3.12. See [Developer guide](docs/DEVELOPER_GUIDE.md) for tests and packaging.
 
-```powershell
-$env:QT_QPA_PLATFORM = 'offscreen'
-.\.venv\Scripts\python.exe -m pytest -q --ignore=tests/test_full_workflow.py
-```
+## Data and privacy
 
-The excluded end-to-end test generates/exports 1,000 synthetic pages; run it when relevant. PDF tests use existing PDFium/Qt; PyMuPDF is not required. CI runs the core Windows suite without repository secrets; actual GitHub CI status is only known after a push.
+Projects are local `.lmw` folders with SQLite, source references/copies and derived assets. Copy mode keeps project-owned files; Reference mode depends on original paths. Keep a complete backup before upgrades.
 
-### Windows build
+OCR and manual editing run locally. Cloud translation sends selected text and enabled context to the configured service. Local translation requires a server you install and start separately. API keys use Windows Credential Manager, not project storage.
 
-```powershell
-.\.venv\Scripts\python.exe -m pip install -r requirements-build-win-py312.txt
-powershell -NoProfile -ExecutionPolicy Bypass -File tools/build_release.ps1
-```
+## Release boundaries
 
-The observed build versions are pinned; bit-for-bit reproducibility is not promised. The onedir ZIP contains LICENSE, NOTICE and third-party licenses. `dist/` and model files are excluded from source Git; distribute binaries as Release assets. See [Contributing](CONTRIBUTING.md), [Security](SECURITY.md) and [manual publishing](docs/MANUAL_GITHUB_PUBLISH.md).
+Automated tests use synthetic documents and mock translation services. Real paid APIs, real local models and visible Windows DPI/UX require user acceptance. PDF page import is supported; final export formats are those available in the export dialog. See [release notes](RELEASE_NOTES_0.6.0.md).
 
-## Known limitations
+## License and contribution
 
-- Windows-first; macOS/Linux have not been validated.
-- Japanese OCR accuracy depends on the model and page quality; review results.
-- Complex backgrounds may need manual erase/mask correction.
-- Vertical typesetting is evolving; exact source fonts cannot be recovered reliably.
-- Real visible Windows UI acceptance is recommended for each release.
-- System theme is read at startup/selection; live Windows theme monitoring is not guaranteed.
-- The portable executable is unsigned.
+App source: Apache-2.0. Dependencies and OCR models retain their own licenses: [third party notices](THIRD_PARTY_NOTICES.md), [model licenses](MODEL_LICENSES.md), [license review](LICENSE_REVIEW.md).
 
-The software provides no manga content. Users are responsible for permission to process and distribute their material. See [Roadmap](ROADMAP.md) and [Changelog](CHANGELOG.md); no delivery dates are promised.
-
-## License and credits
-
-Links Manga Studio is licensed under the **Apache License 2.0**. You may use, copy, modify, redistribute, create derivative works and use commercially subject to its terms. This license does not require every fork or modification to be publicly released.
-
-See [LICENSE](LICENSE) and [NOTICE](NOTICE). Third-party components and OCR models retain their own ownership and licenses: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md), [MODEL_LICENSES.md](MODEL_LICENSES.md). Credits include Qt/PySide6, PDFium, RapidOCR/PaddleOCR, ONNX Runtime, OpenCV, Pillow, python-docx, NumPy and fontTools. Contributors retain rights in their contributions.
+[Architecture](docs/ARCHITECTURE.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Code of conduct](CODE_OF_CONDUCT.md)

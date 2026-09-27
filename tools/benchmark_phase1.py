@@ -49,7 +49,7 @@ def wait(app: QApplication, predicate, seconds: float = 30) -> None:
     app.processEvents()
 
 
-def main() -> None:
+def main(report_destination: str | None = None) -> None:
     app = QApplication.instance() or QApplication([])
     font_id = QFontDatabase.addApplicationFont("C:/Windows/Fonts/arial.ttf")
     if font_id < 0:
@@ -142,11 +142,14 @@ def main() -> None:
               "thumbnail_files_on_open": thumbnails_on_open, "cache_budget_mb": 16, "evictions": evictions,
               "memory_samples": samples, "high_resolution": highres, "platform": sys.version,
               "qt_platform": os.environ.get("QT_QPA_PLATFORM", "windows"), "result": "PASS"}
-    report_path = root / "docs" / "phase1_metrics.json"
+    report_path = root / report_destination if report_destination else root / "docs" / "phase1_metrics.json"
     report_path.parent.mkdir(exist_ok=True)
     report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report, ensure_ascii=True, indent=2))
 
 
 if __name__ == "__main__":
-    main()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--report", help="Optional separate report path; historical metrics preserved")
+    main(parser.parse_args().report)

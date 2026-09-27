@@ -7,7 +7,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EXCLUDED = {".venv", "venv", "build", "dist", "dev_data", "__pycache__",
-            ".pytest_cache", ".mypy_cache", ".ruff_cache", ".idea", ".vscode"}
+            ".pytest_cache", ".mypy_cache", ".ruff_cache", ".idea", ".vscode", "publication", ".git"}
 PRIVATE_SUFFIXES = {".lmw", ".sqlite3", ".onnx", ".pdmodel", ".pdiparams",
                     ".ttf", ".otf", ".ttc", ".pdf", ".log", ".dmp", ".mdmp", ".zip",
                     ".db", ".bin", ".model", ".stackdump"}
@@ -24,13 +24,13 @@ PATTERNS = {
 }
 
 
-def scan() -> list[str]:
+def scan(root: Path = ROOT) -> list[str]:
     findings = []
-    for directory, subdirs, filenames in os.walk(ROOT):
+    for directory, subdirs, filenames in os.walk(root):
         subdirs[:] = [name for name in subdirs if name not in EXCLUDED]
         for name in filenames:
             path = Path(directory) / name
-            relative = path.relative_to(ROOT)
+            relative = path.relative_to(root)
             if path.suffix.lower() in PRIVATE_SUFFIXES or name in {"project.json", "config.json"}:
                 findings.append(f"{relative}: forbidden source asset")
                 continue
@@ -49,7 +49,10 @@ def scan() -> list[str]:
 
 
 if __name__ == "__main__":
-    results = scan()
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--root", type=Path, default=ROOT)
+    results = scan(parser.parse_args().root.resolve())
     print("Public source candidate scan:", "PASS" if not results else "REVIEW REQUIRED")
     print("Findings:", len(results))
     for result in results:

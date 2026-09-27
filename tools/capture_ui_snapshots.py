@@ -74,11 +74,12 @@ def capture(widget, path):
 
 def main():
     app = QApplication([])
-    output = Path(__file__).resolve().parents[1] / "docs" / "ui_snapshots" / "0.5.0"
+    output = Path(__file__).resolve().parents[1] / "docs" / "ui_snapshots" / "0.6.0"
     output.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="lmw-ui-") as temporary:
         folder = Path(temporary)
         config = Config(folder / "config.json")
+        config.data["language"] = "zh_CN"
         service = ProjectService(config)
         window = MainWindow(service, folder / "app.log")
         window.resize(1366, 768)
@@ -101,7 +102,25 @@ def main():
         spin(app, lambda: window.workspace.canvas.page_id == page["id"] and not window.workspace.jobs)
         capture(window, output / "workspace_dark.png")
         window.workspace.select_block(block["id"])
+        capture(window, output / "translation_manual.png")
         capture(window, output / "inspector_translation.png")
+        from app.translation.profiles import ProfileStore,ProviderProfile
+        from app.translation.service import TranslationService
+        from app.translation.providers import TranslationResult
+        from app.translation.tasks import create_translation_task
+        profile=ProviderProfile("snapshot-local","Local Qwen","ollama",model="qwen-demo")
+        store=ProfileStore(config);store.save(profile)
+        cfg_mode=config.data.get("translation_mode","manual")
+        config.data["translation_mode"]="local"
+        svc=TranslationService(service.connection)
+        payload,snapshots=svc.prepare(page["id"],{"overwrite_protected":True})
+        svc.apply(snapshots,TranslationResult({block["text_uid"]:"你好，世界。"}),profile)
+        window.workspace.select_block(block["id"])
+        capture(window,output/"translation_ai_draft.png")
+        svc.mark_reviewed(block["id"])
+        window.workspace.select_block(block["id"])
+        capture(window,output/"translation_reviewed.png")
+        window.workspace.ai_next_draft()
         window.set_theme("light")
         capture(window, output / "workspace_light.png")
         window.set_theme("dark")
@@ -115,6 +134,20 @@ def main():
         spin(app, lambda: settings.isVisible())
         capture(settings, output / "settings_appearance.png")
         settings.close()
+        config.data["translation_mode"]="local"
+        config.data["translation_profile_id"]=profile.id
+        settings=SettingsDialog(window);settings.navigation.setCurrentRow(3);settings.show();app.processEvents()
+        capture(settings,output/"settings_translation_local.png");settings.close()
+        cloud=ProviderProfile("snapshot-cloud","Cloud API","openai","https://example.invalid/v1","example-model",max_concurrency=2)
+        store.save(cloud);config.data["translation_mode"]="cloud";config.data["translation_profile_id"]=cloud.id
+        settings=SettingsDialog(window);settings.navigation.setCurrentRow(3);settings.show();app.processEvents()
+        capture(settings,output/"settings_translation_cloud.png");settings.close()
+        from app.ui.translation_settings import ProfileEditor,ProjectTranslationDialog
+        editor=ProfileEditor(store,window.language,cloud,window);editor.show();app.processEvents()
+        capture(editor,output/"provider_cloud.png");editor.close()
+        editor=ProjectTranslationDialog(service.connection,window.language,window);editor.show();app.processEvents()
+        capture(editor,output/"glossary.png");editor.close()
+        config.data["translation_mode"]=cfg_mode
         from app.ui.about_dialog import AboutDialog
         about = AboutDialog(window)
         about.show()
@@ -131,6 +164,10 @@ def main():
         report = QualityChecker(service.connection).scan()
         window.workspace._show_quality_report(report)
         capture(window, output / "quality_check.png")
+        capture(window, output / "quality.png")
+        create_translation_task(service.connection,[page["id"]],profile.id)
+        window.workspace.refresh_ai_tasks();window.workspace.bottom_tabs.setCurrentIndex(0);window.workspace.bottom_tabs.show()
+        app.processEvents();capture(window,output/"task_dock.png")
         window.close_project()
         window.resize(1366, 768)
         capture(window, output / "startup-recent.png")

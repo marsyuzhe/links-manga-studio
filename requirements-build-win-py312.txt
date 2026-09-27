@@ -1,4 +1,4 @@
-# Observed v0.5.0 Windows/Python 3.12 build environment. Re-audit before upgrades.
+# Observed v0.6.0 Windows/Python 3.12 build environment. Re-audit before upgrades.
 -e .
 altgraph==0.17.5
 antlr4-python3-runtime==4.9.3
