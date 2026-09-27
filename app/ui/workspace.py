@@ -1,13 +1,14 @@
 """Page-workspace controller; business work stays in services and workers."""
 from __future__ import annotations
 import json
+import logging
 from pathlib import Path
 
 from PySide6.QtCore import QPoint, QSize, Qt, QTimer, Signal
-from PySide6.QtGui import QAction, QFontDatabase
+from PySide6.QtGui import QAction, QFontDatabase, QShortcut
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QDoubleSpinBox, QFileDialog, QFormLayout, QInputDialog,
                               QHBoxLayout, QLabel, QLineEdit, QListView, QListWidget, QListWidgetItem, QMessageBox, QPlainTextEdit,
-                              QMenu, QProgressBar, QPushButton, QSpinBox, QSplitter, QTabWidget, QTextEdit, QVBoxLayout, QWidget)
+                              QMenu, QProgressBar, QPushButton, QToolButton, QScrollArea, QSpinBox, QTabWidget, QTextEdit, QVBoxLayout, QWidget)
 from app.cache.image_cache import ImageCache
 from app.database.database import connect
 from app.importers.folder_importer import scan_files, scan_folder
@@ -35,18 +36,19 @@ from app.rendering.layout import fit_layout
 from app.styles.project_styles import ProjectStyleService, ROLES
 from app.quality.checker import QualityChecker
 from .project_styles import ProjectStylesDialog
-from .quality_dialog import QualityDialog
 from app.config import config_dir
 from .canvas import ComicCanvas
 from .page_panel import PageListModel, PageRowDelegate
+from .workspace_chrome import RailButton, WorkspaceSplitter
 from .workers import ImageWorker, Job
 from .icons import icon
-from .components import ActionButton, SectionHeader
+from .components import ActionButton, SectionHeader, CollapsibleSection, exec_dialog
 
 
 class Workspace(QWidget):
     status_changed = Signal(str)
     busy_changed = Signal(bool)
+    task_progress = Signal(int, int, str)
 
     def __init__(self, config, language, parent=None) -> None:
         super().__init__(parent)
@@ -70,16 +72,21 @@ class Workspace(QWidget):
         self.panel.setItemDelegate(self.page_delegate)
         self.panel.setUniformItemSizes(True)
         self.panel.setIconSize(QSize(64, 88))
-        self.panel.setMinimumWidth(220)
+        self.panel.setMinimumWidth(240)
         self.panel.setAccessibleName(self.language.tr("panel.pages"))
         self.panel.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.panel.customContextMenuRequested.connect(self._page_context_menu)
         self.batch_list = QListWidget()
         self.ocr_list = QListWidget()
         self.ocr_list.setSelectionMode(QListWidget.SelectionMode.ExtendedSelection)
+        from .ocr_list import OCRRowDelegate
+        self.ocr_list.setItemDelegate(OCRRowDelegate(self))
+        self.ocr_list.setUniformItemSizes(True)
         self.ocr_search = QLineEdit()
+        self.ocr_search.setClearButtonEnabled(True)
         self.ocr_filter = QComboBox()
         self.ocr_filter.addItems(["all", "untranslated", "translated", "low confidence", "not typeset", "overflow"])
+        self.ocr_filter.addItems(["AI Draft", "Human Edited", "Reviewed"])
         self.ocr_panel = QWidget()
         ocr_layout = QVBoxLayout(self.ocr_panel)
         ocr_layout.setContentsMargins(12, 12, 12, 12)
@@ -101,7 +108,7 @@ class Workspace(QWidget):
         for widget, title in ((self.panel, "Pages"), (self.ocr_panel, "OCR Text"),
                               (self.batch_list, "Batches"), (self.project_list, "Project")):
             self.left_tabs.addTab(widget, title)
-        self.left_tabs.setMinimumWidth(220)
+        self.left_tabs.setMinimumWidth(240)
         self.left_tabs.setProperty("role", "panel")
         self.ocr_list.currentRowChanged.connect(self._ocr_list_selected)
         self.canvas = ComicCanvas()
@@ -119,7 +126,7 @@ class Workspace(QWidget):
         self.block_source.setMaximumHeight(90)
         self.block_translation = QTextEdit()
         self.block_translation.setMinimumHeight(120)
-        self.block_translation.setMaximumHeight(200)
+        self.block_translation.setMaximumHeight(260)
         self.translation_timer = QTimer(self)
         self.translation_timer.setSingleShot(True)
         self.translation_timer.setInterval(600)
@@ -221,7 +228,7 @@ class Workspace(QWidget):
         self.block_editor = self.right_tabs
         properties = QWidget()
         form = QFormLayout(properties)
-        form.setContentsMargins(12, 16, 12, 12)
+        form.setContentsMargins(16, 16, 16, 16)
         form.setSpacing(8)
         form.addRow(self.block_id_label)
         for key, field in self.geometry_inputs.items():
@@ -233,35 +240,67 @@ class Workspace(QWidget):
         form.addRow(self.save_block_button)
         source_tab = QWidget()
         source_form = QFormLayout(source_tab)
-        source_form.setContentsMargins(12, 16, 12, 12)
+        source_form.setContentsMargins(16, 16, 16, 16)
         source_form.setSpacing(8)
         source_form.addRow(self.review_labels["source"], self.block_source)
         source_form.addRow(self.source_confidence)
         source_form.addRow(self.review_labels["order"], self.block_order)
         translation_tab = QWidget()
         translation_form = QVBoxLayout(translation_tab)
-        translation_form.setContentsMargins(12, 16, 12, 12)
+        translation_form.setContentsMargins(16, 16, 16, 16)
         translation_form.setSpacing(8)
         self.translation_role.setProperty("role", "muted")
-        self.translation_source_summary.setProperty("role", "section")
-        translation_form.addWidget(self.translation_role)
+        self.translation_source_summary.setProperty("role", "muted")
+        self.translation_source_summary.setMaximumHeight(48)
+        self.translation_role.hide()
         translation_form.addWidget(self.translation_source_summary)
         translation_form.addSpacing(8)
         translation_form.addWidget(self.review_labels["translation"])
         translation_form.addWidget(self.block_translation)
-        translation_form.addWidget(self.review_labels["notes"])
-        translation_form.addWidget(self.block_notes)
-        translation_form.addStretch(1)
+        self.translation_notes = CollapsibleSection(self.language.tr("review.notes"), self.block_notes)
+        translation_form.addWidget(self.translation_notes)
+        self.translation_more = QToolButton()
+        self.translation_more.setIcon(icon("more"))
+        self.translation_more.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.translation_more.setToolTip(self.language.tr("ui.more"))
+        self.translation_menu = QMenu(self.translation_more)
+        self.translation_more.setMenu(self.translation_menu)
         self.erase_refill_button.setProperty("variant", "primary")
-        self.erase_refill_button.setMinimumHeight(40)
+        self.erase_refill_button.setFixedHeight(34)
         self.erase_refill_button.setIcon(icon("erase", "#10141D"))
+        # Primary action is placed after the compact translation controls.
+        self.fill_only_button.hide()
+        self.translation_status.setProperty("role", "muted")
+
+        self.ai_provenance = QLabel()
+        self.ai_provenance.setWordWrap(True)
+        self.ai_provenance.setProperty("role", "muted")
+        self.ai_provenance.setTextFormat(Qt.TextFormat.RichText)
+        self.ai_provenance.setTextInteractionFlags(Qt.TextInteractionFlag.LinksAccessibleByMouse | Qt.TextInteractionFlag.LinksAccessibleByKeyboard)
+        self.ai_provenance.linkActivated.connect(self.translation_provenance_menu)
+        translation_form.addWidget(self.ai_provenance)
+        self.ai_controls = []
+        ai_row = QHBoxLayout()
+        for key, action in (("translate_block", lambda: self.ai_translate(True)),
+                            ("regenerate", lambda: self.ai_translate(True, True))):
+            button = QPushButton(self.language.tr("ai." + key))
+            button.setProperty("variant", "secondary" if key == "translate_block" else "ghost")
+            button.clicked.connect(action)
+            ai_row.addWidget(button)
+            self.ai_controls.append((button, key))
+        self.translation_more.setFixedSize(28, 28)
+        ai_row.addStretch(1)
+        self.translation_more.hide()
+        translation_form.addLayout(ai_row)
         translation_form.addWidget(self.erase_refill_button)
-        translation_form.addWidget(self.fill_only_button)
-        self.translation_status.setProperty("role", "badge")
         translation_form.addWidget(self.translation_status)
+        translation_form.addStretch(1)
+        for key, handler in (("ai.reviewed", self.ai_mark_reviewed), ("ai.next", self.ai_next_draft),
+                ("action.fill_only", self.fill_selected_block), ("style.reset", self.reset_style)):
+            self.translation_menu.addAction(self.language.tr(key), handler)
         erase_tab = QWidget()
         erase_form = QFormLayout(erase_tab)
-        erase_form.setContentsMargins(12, 16, 12, 12)
+        erase_form.setContentsMargins(16, 16, 16, 16)
         erase_form.setSpacing(8)
         erase_form.addRow(self.review_labels["erase"], self.erase_mode)
         erase_form.addRow(self.erase_only_button)
@@ -269,7 +308,7 @@ class Workspace(QWidget):
         erase_form.addRow(self.mask_button)
         style_tab = QWidget()
         self.style_form = QFormLayout(style_tab)
-        self.style_form.setContentsMargins(12, 16, 12, 12)
+        self.style_form.setContentsMargins(16, 16, 16, 16)
         self.style_form.setSpacing(8)
         self.style_form.addRow(self.style_inheritance)
         self.style_form.addRow(self.style_labels["role"], self.style_role)
@@ -284,7 +323,7 @@ class Workspace(QWidget):
         self.style_form.addRow(self.style_reset_button)
         typeset_tab = QWidget()
         self.typeset_form = QFormLayout(typeset_tab)
-        self.typeset_form.setContentsMargins(12, 16, 12, 12)
+        self.typeset_form.setContentsMargins(16, 16, 16, 16)
         self.typeset_form.setSpacing(8)
         self.typeset_form.addRow(self.review_labels["size"], self.font_size_field)
         self.typeset_form.addRow(self.style_labels["min_size"], self.min_font_size_field)
@@ -300,34 +339,43 @@ class Workspace(QWidget):
         for widget, title in ((translation_tab, "Translation"), (style_tab, "Style"),
                               (typeset_tab, "Typeset"), (source_tab, "Original"),
                               (erase_tab, "Erase"), (properties, "Advanced")):
-            self.right_tabs.addTab(widget, title)
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+            scroll.setWidget(widget)
+            self.right_tabs.addTab(scroll, title)
         inspector_panel = QWidget()
         inspector_panel.setProperty("role", "panel")
+        self.inspector_panel = inspector_panel
         inspector_panel.setMinimumWidth(300)
+        inspector_panel.setMaximumWidth(360)
         inspector_layout = QVBoxLayout(inspector_panel)
         inspector_layout.setContentsMargins(0, 0, 0, 0)
         inspector_layout.setSpacing(0)
         self.inspector_header = SectionHeader()
-        self.inspector_header.setContentsMargins(12, 12, 12, 2)
+        self.inspector_header.setContentsMargins(16, 16, 16, 2)
         self.inspector_header.setText("选择文字框" if self.language.language == "zh_CN" else "Select a text region")
         inspector_layout.addWidget(self.inspector_header)
         self.inspector_state = QLabel()
         self.inspector_state.setProperty("role", "muted")
-        self.inspector_state.setContentsMargins(12, 0, 12, 12)
+        self.inspector_state.setContentsMargins(16, 0, 16, 16)
         self.inspector_state.setText("点击漫画中的文字区域开始编辑" if self.language.language == "zh_CN" else
                                      "Click a text region on the page to edit")
         inspector_layout.addWidget(self.inspector_state)
         self.inspector.hide()
         inspector_layout.addWidget(self.inspector)
         inspector_layout.addWidget(self.right_tabs, 1)
-        splitter = QSplitter()
+        splitter = WorkspaceSplitter()
+        self.canvas.setMinimumWidth(480)
         self.main_splitter = splitter
+        splitter.setHandleWidth(7)
+        splitter.setChildrenCollapsible(False)
         for widget in (self.left_tabs, self.canvas, inspector_panel):
             splitter.addWidget(widget)
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         splitter.setStretchFactor(2, 0)
-        splitter.setSizes([240, 760, 320])
+        splitter.setSizes([280, 760, 320])
         self.progress = QProgressBar()
         self.progress.hide()
         self.progress_label = QLabel()
@@ -342,7 +390,7 @@ class Workspace(QWidget):
         work_row.setSpacing(0)
         self.tool_rail = QWidget()
         self.tool_rail.setProperty("role", "rail")
-        self.tool_rail.setFixedWidth(48)
+        self.tool_rail.setFixedWidth(44)
         self.rail_layout = QVBoxLayout(self.tool_rail)
         self.rail_layout.setContentsMargins(4, 8, 4, 8)
         self.rail_layout.setSpacing(4)
@@ -354,6 +402,17 @@ class Workspace(QWidget):
         task_layout = QVBoxLayout(task_tab)
         task_layout.addWidget(self.progress_label)
         task_layout.addWidget(self.progress)
+        self.ai_task_list = QListWidget()
+        self.ai_task_list.setMaximumHeight(130)
+        task_layout.addWidget(self.ai_task_list)
+        ai_tasks_row = QHBoxLayout()
+        for key, action in (("pause", self.ai_pause), ("resume", self.ai_resume),
+                            ("retry_failed", lambda: self.ai_resume(True))):
+            button = QPushButton(self.language.tr("ai."+key))
+            button.clicked.connect(action)
+            ai_tasks_row.addWidget(button)
+            self.ai_controls.append((button, key))
+        task_layout.addLayout(ai_tasks_row)
         self.log_label = QPlainTextEdit()
         self.log_label.setReadOnly(True)
         self.export_label = QLabel("No export running")
@@ -399,6 +458,9 @@ class Workspace(QWidget):
             ("ocr_page", "action.ocr_page", self.ocr_current_page, ""),
             ("ocr_all", "action.ocr_all", self.ocr_all_pages, ""),
             ("ocr_resume", "action.ocr_resume", self.resume_ocr, ""),
+            ("ai_page", "ai.translate_page", lambda: self.ai_translate(), ""),
+            ("ai_next", "ai.next_draft", self.ai_next_draft, ""),
+            ("ai_project", "ai.project_settings", self.ai_project_settings, ""),
             ("models", "action.models", self.show_models, ""),
             ("batches", "action.create_batches", self.create_batches, ""),
             ("project_styles", "style.project_title", self.show_project_styles, ""),
@@ -411,14 +473,14 @@ class Workspace(QWidget):
             ("export_all", "action.export_all", self.export_all_pages, ""),
             ("export_resume", "action.export_resume", self.resume_export, ""),
             ("undo", "action.undo", self.undo, "Ctrl+Z"),
-            ("redo", "action.redo", self.redo, "Ctrl+Y"),
+            ("redo", "action.redo", self.redo, "Ctrl+Shift+Z"),
             ("copy_style", "review.copy_style", self.copy_style, "Ctrl+Shift+C"),
             ("paste_style", "review.paste_style", self.paste_style, "Ctrl+Shift+V"),
             ("duplicate_block", "review.duplicate", self.duplicate_block, ""),
             ("delete_block", "review.delete", self.delete_block, ""),
             ("previous", "action.previous_page", lambda: self.navigate(-1), "PgUp"),
             ("next", "action.next_page", lambda: self.navigate(1), "PgDown"),
-            ("fit", "action.fit_window", self.canvas.fit, "Ctrl+0"),
+            ("fit", "action.fit_window", self.canvas.fit, "F"),
             ("actual", "action.actual_size", lambda: self.canvas.set_zoom(1), "Ctrl+1"),
             ("zoom_in", "action.zoom_in", lambda: self.canvas.zoom_by(1.2), "+"),
             ("zoom_out", "action.zoom_out", lambda: self.canvas.zoom_by(1/1.2), "-"),
@@ -446,6 +508,8 @@ class Workspace(QWidget):
         self.page_delegate.tokens = tokens
         self.panel.viewport().update()
         self.canvas.set_theme(tokens)
+        if self.selected_block and self.pages_service:
+            self.update_translation_provenance(TextBlockService(self.pages_service.connection).translation(self.selected_block))
         for name, button in self.rail_buttons.items():
             button.setIcon(icon(name, tokens["text_secondary"], 20))
         self.erase_refill_button.setIcon(icon("erase", tokens["accent_text"]))
@@ -461,18 +525,26 @@ class Workspace(QWidget):
             ("mask", "mask", self.edit_mask),
             ("zoom", "zoom", lambda: self.canvas.zoom_by(1.2)),
         ):
-            button = ActionButton(variant="rail", icon=icon(glyph, size=20))
-            button.setFixedSize(40, 40)
+            button = RailButton(glyph)
+            button.setFixedSize(36, 36)
             button.clicked.connect(handler)
             button.setCheckable(key in ("pointer", "hand", "text"))
             self.rail_layout.addWidget(button)
             self.rail_buttons[key] = button
+        self.tool_shortcuts = []
+        for key, tool in (("V", "pointer"), ("T", "text")):
+            shortcut = QShortcut(key, self.canvas)
+            shortcut.setContext(Qt.ShortcutContext.WidgetWithChildrenShortcut)
+            shortcut.activated.connect(lambda name=tool: self._activate_rail(name))
+            self.tool_shortcuts.append(shortcut)
         self.rail_buttons["pointer"].setChecked(True)
         self.rail_layout.addStretch(1)
 
     def _block_context_menu(self, block_id: str, position) -> None:
         self.select_block(block_id)
         menu = QMenu(self)
+        shared = {"erase_and_refill_current": "erase_refill", "copy_style": "copy_style",
+                  "paste_style": "paste_style", "delete_block": "delete_block"}
         for title, handler in (
             (self.language.tr("review.translation"), lambda: self.focus_translation_editor(block_id)),
             (self.language.tr("action.erase_only"), self.erase_selected_block),
@@ -480,9 +552,18 @@ class Workspace(QWidget):
             (self.language.tr("style.auto_fit_now"), self.refresh_auto_fit),
             (self.language.tr("review.copy_style"), self.copy_style),
             (self.language.tr("review.paste_style"), self.paste_style),
+            (self.language.tr("ai.translate_block"), lambda: self.ai_translate(True)),
+            (self.language.tr("ai.regenerate"), lambda: self.ai_translate(True, True)),
+            (self.language.tr("ai.reviewed"), self.ai_mark_reviewed),
+            (self.language.tr("action.fill_only"), self.fill_selected_block),
+            (self.language.tr("style.reset"), self.reset_style),
             (self.language.tr("review.delete"), self.delete_block),
         ):
-            menu.addAction(title, handler)
+            key = shared.get(getattr(handler, "__name__", ""))
+            if key:
+                menu.addAction(self.actions[key])
+            else:
+                menu.addAction(title, handler)
         menu.exec(position)
 
     def _page_context_menu(self, position) -> None:
@@ -491,13 +572,29 @@ class Workspace(QWidget):
             return
         self.panel.setCurrentIndex(index)
         menu = QMenu(self)
-        for title, handler in (
-            (self.language.tr("action.ocr_page"), self.ocr_current_page),
-            (self.language.tr("action.export_page"), self.export_current_page),
-            (self.language.tr("quality.title"), self.show_quality_check),
-        ):
-            menu.addAction(title, handler)
+        menu.addAction(self.language.tr("view.page_info"), self.show_page_information)
+        for key in ("ocr_page", "export_page", "quality_check"):
+            menu.addAction(self.actions[key])
         menu.exec(self.panel.viewport().mapToGlobal(position))
+
+    def show_page_information(self) -> None:
+        if not 0 <= self.current_row < len(self.model.pages):
+            return
+        page = self.model.pages[self.current_row]
+        dialog = QDialog(self)
+        dialog.setWindowTitle(self.language.tr("view.page_info"))
+        dialog.resize(560, 260)
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(16, 16, 16, 16)
+        detail = QPlainTextEdit()
+        detail.setReadOnly(True)
+        detail.setPlainText(f"{page['filename']}\n{page['path']}\n\nPage UID: {page['page_uid']}")
+        layout.addWidget(detail)
+        close = QPushButton(self.language.tr("ui.close"))
+        close.setProperty("variant", "ghost")
+        close.clicked.connect(dialog.accept)
+        layout.addWidget(close, alignment=Qt.AlignmentFlag.AlignRight)
+        exec_dialog(dialog)
 
     def _activate_rail(self, key: str) -> None:
         for name in ("pointer", "hand", "text"):
@@ -521,8 +618,8 @@ class Workspace(QWidget):
         self.panel.setAccessibleName(tr("panel.pages"))
         for index, key in enumerate(("panel.pages", "panel.ocr_text", "panel.batches", "panel.project")):
             self.left_tabs.setTabText(index, tr(key))
-        for key, tip in (("pointer", "Pointer"), ("hand", "Hand · Space + drag"),
-                         ("text", tr("action.fill_translation")), ("erase", tr("action.erase_only")),
+        for key, tip in (("pointer", "选择 · V" if self.language.language == "zh_CN" else "Select · V"), ("hand", "抓手 · Space + 拖动" if self.language.language == "zh_CN" else "Hand · Space + drag"),
+                         ("text", tr("action.fill_translation") + " · T"), ("erase", tr("action.erase_only")),
                          ("mask", tr("review.mask")), ("zoom", tr("action.zoom_in"))):
             self.rail_buttons[key].setToolTip(tip)
         self.ocr_empty.setText("当前页还没有识别文字。" if self.language.language == "zh_CN" else
@@ -545,6 +642,12 @@ class Workspace(QWidget):
         self.ocr_search.setPlaceholderText(tr("panel.search_ocr"))
         for index, key in enumerate(("filter.all", "filter.untranslated", "filter.translated", "filter.low_confidence", "filter.not_typeset", "filter.overflow")):
             self.ocr_filter.setItemText(index, tr(key))
+        for index, key in enumerate(("ai_draft", "human_edited", "reviewed"), 6):
+            self.ocr_filter.setItemText(index, tr("ai.status_"+key))
+        self.actions["ai_project"].setText("术语库" if self.language.language=="zh_CN" else "Project Glossary")
+        self.ocr_search.setPlaceholderText("搜索文字或 Text UID" if self.language.language=="zh_CN" else "Search text or Text UID")
+        for button, key in self.ai_controls:
+            button.setText(tr("ai."+key))
         for index, key in enumerate(("panel.tasks", "panel.logs", "panel.export")):
             self.bottom_tabs.setTabText(index, tr(key))
         self.bottom_tabs.setTabText(3, tr("quality.title"))
@@ -552,8 +655,12 @@ class Workspace(QWidget):
         self.model.retranslate()
         for key, label in self.review_labels.items():
             label.setText(tr(f"review.{key}"))
+        self.translation_notes.header.setText(tr("review.notes"))
+        self.translation_more.setToolTip(tr("ui.more"))
+        for action, key in zip(self.translation_menu.actions(), ("ai.reviewed", "ai.next", "action.fill_only", "style.reset")):
+            action.setText(tr(key))
         self.save_block_button.setText(tr("review.save"))
-        self.erase_refill_button.setText(tr("action.erase_refill"))
+        self.erase_refill_button.setText("擦除并回填" if self.language.language == "zh_CN" else "Erase & fill")
         self.erase_only_button.setText(tr("action.erase_only"))
         self.fill_only_button.setText(tr("action.fill_only"))
         self.restore_erase_button.setText(tr("action.restore_erase"))
@@ -644,6 +751,7 @@ class Workspace(QWidget):
         self.update_actions()
 
     def _refresh_side_panels(self) -> None:
+        self.refresh_ai_tasks()
         self.batch_list.clear()
         self.project_list.clear()
         if not self.pages_service:
@@ -651,7 +759,7 @@ class Workspace(QWidget):
             return
         for batch in BatchService(self.pages_service.connection).list_batches():
             self.batch_list.addItem(f"Batch {batch['batch_number']} · {batch['page_count']} pages")
-        self.project_list.addItem(str(self.project))
+        self.project_list.addItem(self.project.stem if self.model.simple_mode else str(self.project))
         self.project_list.addItem(f"{len(self.model.pages)} pages")
         self._refresh_ocr_list()
 
@@ -667,6 +775,8 @@ class Workspace(QWidget):
         for block in review.for_page(self.current_id):
             translated = review.translation(block["id"])
             has_translation = bool(translated and translated["text"].strip())
+            if mode >= 6 and (translated or {}).get("status") != ("ai_draft", "human_edited", "reviewed")[mode-6]:
+                continue
             erased = block.get("erase_status") == "erased"
             if (mode == 1 and has_translation) or (mode == 2 and not has_translation) or (mode == 3 and float(block.get("ocr_confidence") or 0) >= .75):
                 continue
@@ -684,11 +794,19 @@ class Workspace(QWidget):
             if query and query not in (block["text_uid"] + block["source_text"] +
                                        (translated["text"] if translated else "")).casefold():
                 continue
-            status = ("E" if erased else "○") + ("✓" if has_translation else "·") + ("!" if overflow else "")
             confidence = round(100 * float(block.get("ocr_confidence") or 0))
             identifier = "" if self.model.simple_mode else block["text_uid"] + "  "
-            self.ocr_list.addItem(f"{status} {identifier}{confidence}%  {block['source_text'][:38]}")
+            state = {"ai_draft":"AI", "reviewed":"审" if self.language.language=="zh_CN" else "OK", "human_edited":"译" if self.language.language=="zh_CN" else "TR"}.get((translated or {}).get("status"),"")
+            self.ocr_list.addItem(block["source_text"])
+            item = self.ocr_list.item(self.ocr_list.count()-1)
+            item.setData(Qt.ItemDataRole.UserRole+1,{"confidence":confidence,"preview":identifier+block["source_text"],"status":state})
+            item.setToolTip(block["source_text"][:120])
             self.ocr_list.item(self.ocr_list.count()-1).setData(Qt.ItemDataRole.UserRole, block["id"])
+        self.ocr_list.blockSignals(True)
+        for index in range(self.ocr_list.count()):
+            if self.ocr_list.item(index).data(Qt.ItemDataRole.UserRole)==self.selected_block:self.ocr_list.setCurrentRow(index);break
+        self.ocr_list.blockSignals(False)
+        self.ocr_empty.setText(("没有搜索结果" if self.language.language=="zh_CN" else "No matches") if query else ("当前范围没有 OCR 文本。" if self.language.language=="zh_CN" else "No OCR text in this view."))
         self.ocr_empty.setVisible(self.ocr_list.count() == 0)
         self.ocr_empty_button.setVisible(self.ocr_list.count() == 0)
         self.ocr_empty_button.setEnabled(bool(self.current_id))
@@ -760,6 +878,7 @@ class Workspace(QWidget):
         self._loading_block = True
         self.update_actions()
         translation = review.translation(block_id)
+        self.update_translation_provenance(translation)
         self.block_id_label.setText("" if self.model.simple_mode else block["text_uid"])
         self.inspector_header.setText(self.language.tr("style.role_" + (block.get("style_role") or "speech")))
         self.inspector_state.setText(("OCR ✓" if block.get("ocr_confidence") is not None else "OCR —") +
@@ -767,6 +886,7 @@ class Workspace(QWidget):
                                       if translation and translation["text"].strip() else "") +
                                      ("  ·  " + ("已擦除" if self.language.language == "zh_CN" else "Erased")
                                       if block.get("erase_status") == "erased" else ""))
+        self.inspector_state.hide()
         self.translation_source_summary.setText(block["source_text"][:120])
         self.source_confidence.setText(self.language.tr("review.confidence", value=round(100 * float(block.get("ocr_confidence") or 0))))
         self.block_source.setPlainText(block["source_text"])
@@ -855,6 +975,8 @@ class Workspace(QWidget):
         if not existing and not text and not notes:
             return
         review.save_translation(self.selected_block, text, notes)
+        saved = review.translation(self.selected_block)
+        self.update_translation_provenance(saved)
         self.translation_status.setText(self.language.tr("status.saved"))
         self.refresh_auto_fit()
         self.quality_warning_count = 0
@@ -941,8 +1063,38 @@ class Workspace(QWidget):
         except ValueError as exc:
             self.fit_status_label.setText(str(exc))
 
+    def update_translation_provenance(self, translation):
+        from html import escape
+        status = translation["status"] if translation else "empty"
+        label = self.language.tr("ai.status_"+status)
+        if translation and translation.get("model"): label += " · " + translation["model"]
+        self.ai_provenance.setText('<a href="details" style="color:'+self.canvas.tokens["text_secondary"]+';text-decoration:none">'+escape(label)+' ›</a>')
+
+    def translation_provenance_menu(self, _link=None):
+        menu = QMenu(self)
+        for action in self.translation_menu.actions(): menu.addAction(action)
+        menu.addSeparator()
+        menu.addAction(self.language.tr("ui.translation_details"), self.translation_details)
+        menu.exec(self.ai_provenance.mapToGlobal(self.ai_provenance.rect().bottomLeft()))
+
+    def translation_details(self, _link=None):
+        if not self.selected_block or not self.pages_service: return
+        from .translation_details import TranslationDetailsDialog
+        exec_dialog(TranslationDetailsDialog(self.pages_service.connection, self.selected_block, self.language, self))
+
+    def open_translation_editor(self):
+        if not self.pages_service or not self.current_id: return
+        blocks = TextBlockService(self.pages_service.connection).for_page(self.current_id)
+        if not blocks:
+            self.left_tabs.setCurrentIndex(1)
+            return
+        self.focus_translation_editor(self.selected_block or blocks[0]["id"])
+
     def set_simple_mode(self, enabled: bool) -> None:
+        self.left_tabs.setTabVisible(3, not enabled)
         self.model.simple_mode = enabled
+        if self.project and self.project_list.count():
+            self.project_list.item(0).setText(self.project.stem if enabled else str(self.project))
         if self.model.pages:
             self.model.dataChanged.emit(self.model.index(0), self.model.index(len(self.model.pages)-1))
         if self.selected_block and self.pages_service:
@@ -954,7 +1106,7 @@ class Workspace(QWidget):
         for form, widgets in ((self.style_form, (self.stroke_color_field, self.stroke_width_field,
                                                  self.font_weight_field)),
                               (self.typeset_form, (self.min_font_size_field, self.letter_spacing_field,
-                                                   self.vertical_alignment_field, self.writing_mode_field))):
+                                                   self.vertical_alignment_field))):
             for widget in widgets:
                 form.setRowVisible(widget, not enabled)
         if self.selected_block:
@@ -966,7 +1118,7 @@ class Workspace(QWidget):
         dialog = ProjectStylesDialog(ProjectStyleService(self.pages_service.connection), self.language,
                                      self.open_font_browser, self)
         dialog.changed.connect(self._project_styles_changed)
-        dialog.exec()
+        exec_dialog(dialog)
 
     def _project_font_names(self) -> set[str]:
         if not self.pages_service:
@@ -1071,6 +1223,8 @@ class Workspace(QWidget):
             item = QListWidgetItem(f"{prefix}{block}  ·  {self.language.tr('quality.' + issue['code'])}")
             item.setData(Qt.ItemDataRole.UserRole, issue)
             self.quality_list.addItem(item)
+        if not report["issues"]:
+            self.quality_summary.setText(self.language.tr("quality.no_issues"))
         self.bottom_tabs.setCurrentIndex(3)
         self.bottom_tabs.show()
 
@@ -1202,7 +1356,7 @@ class Workspace(QWidget):
                                          max(1, int((box[2]-box[0])*sx)), max(1, int((box[3]-box[1])*sy)))
                     suggestions = recommend(cropped, records)
                 except Exception:
-                    pass
+                    logging.getLogger(__name__).debug("Optional font recommendation unavailable", exc_info=True)
             return records, suggestions
         def show(result):
             records, suggestions = result
@@ -1211,7 +1365,7 @@ class Workspace(QWidget):
             if self.selected_block:
                 dialog.preview_changed.connect(lambda family: self.canvas.preview_font(
                     self.selected_block, family, self.block_translation.toPlainText()))
-            accepted = dialog.exec() == QDialog.DialogCode.Accepted
+            accepted = exec_dialog(dialog) == QDialog.DialogCode.Accepted
             self.canvas.clear_font_preview()
             if accepted and dialog.selected():
                 callback(dialog.selected())
@@ -1220,6 +1374,9 @@ class Workspace(QWidget):
         self.run_job(operation, show, "status.font_scan")
 
     def undo(self) -> None:
+        host=self.window()
+        if hasattr(host,"glossary_workspace") and host.stack.currentWidget() is host.glossary_workspace:
+            host.glossary_workspace.history(False);return
         command = HistoryService(self.pages_service.connection).next_command() if self.pages_service else None
         if self.pages_service and HistoryService(self.pages_service.connection).undo():
             self.cache.clear()
@@ -1229,6 +1386,9 @@ class Workspace(QWidget):
             self.status_changed.emit(self.language.tr("status.undo_done", command=self._command_name(command)))
 
     def redo(self) -> None:
+        host=self.window()
+        if hasattr(host,"glossary_workspace") and host.stack.currentWidget() is host.glossary_workspace:
+            host.glossary_workspace.history(True);return
         command = HistoryService(self.pages_service.connection).next_command(True) if self.pages_service else None
         if self.pages_service and HistoryService(self.pages_service.connection).redo():
             self.cache.clear()
@@ -1251,7 +1411,7 @@ class Workspace(QWidget):
         from PySide6.QtGui import QImage
         mask = QImage(str(self.project / row["mask_path"])) if row and row["mask_path"] else None
         dialog = MaskDialog(source, mask, self)
-        if dialog.exec() == QDialog.DialogCode.Accepted:
+        if exec_dialog(dialog) == QDialog.DialogCode.Accepted:
             edits = RenderEditService(self.pages_service.connection, self.project)
             edits.set_mask(self.selected_block, dialog.view.mask)
             edits.set_erase(self.selected_block, "telea")
@@ -1298,6 +1458,9 @@ class Workspace(QWidget):
     def update_actions(self) -> None:
         for action in self.actions.values():
             action.setEnabled(self.project is not None)
+        for key in ("ai_page", "ai_next", "ai_project"):
+            if key in self.actions:
+                self.actions[key].setEnabled(self.pages_service is not None and not self.jobs)
         for key in ("images", "folder", "pdf", "ocr_page", "ocr_all", "ocr_resume", "batches", "project_styles", "replace_fonts", "quality_check", "word_export", "word_import", "export_page", "export_batch", "export_all", "export_resume", "relocate", "up", "down"):
             self.actions[key].setEnabled(self.project is not None and not self.jobs)
         self.actions["ocr_page"].setEnabled(self.current_id is not None and not self.jobs)
@@ -1336,9 +1499,7 @@ class Workspace(QWidget):
                     else "status.next_refill" if erased < translated else "status.next_export")
         self.status_changed.emit(tr("status.page_compact", page=self.current_row+1, total=len(self.model.pages),
                                     uid="" if self.model.simple_mode else p["page_uid"], zoom=f"{zoom:.0f}", ocr=count,
-                                    translated=translated, erased=p.get("typeset_count", 0)) +
-                                 ("  ⚠ " + str(self.quality_warning_count) if self.quality_warning_count else "") +
-                                 "   " + tr(next_key))
+                                    translated=translated, erased=p.get("typeset_count", 0)))
         mode = tr("source.copy" if p["stored_path"] else "source.reference")
         self.inspector.setText(tr("page.inspector", uid="" if self.model.simple_mode else p["page_uid"], order=p["display_order"],
                                   label=self.language.display_label(p), filename=p["filename"],
@@ -1355,7 +1516,7 @@ class Workspace(QWidget):
         self._last_progress = None
         self.progress_label.setText(self.language.tr(title))
         self.bottom_tabs.setCurrentIndex(0)
-        self.bottom_tabs.show()
+        # Long task progress lives in the status bar; details open on demand.
         self.busy_changed.emit(True)
         self.update_actions()
         job.progress.connect(self.on_progress)
@@ -1365,6 +1526,7 @@ class Workspace(QWidget):
         job.start()
 
     def on_progress(self, value: int, total: int, text: str) -> None:
+        self.task_progress.emit(value, total, text)
         self._last_progress = (value, total, text)
         self.progress.setRange(0, max(1, total))
         self.progress.setValue(value)
@@ -1540,6 +1702,41 @@ class Workspace(QWidget):
         if self.current_id:
             self._start_ocr([self.current_id])
 
+    def ai_translate(self, single=False, regenerate=False):
+        host=self.window()
+        host.show_translation_center("block" if single else "page")
+        host.translation_center.drafts.setChecked(regenerate)
+
+    def ai_pause(self):
+        from .ai_translation import pause
+        pause(self)
+
+    def ai_resume(self, retry=False):
+        from .ai_translation import resume
+        resume(self, retry)
+
+    def ai_mark_reviewed(self):
+        from .ai_translation import reviewed
+        if self.pages_service:
+            reviewed(self)
+
+    def ai_next_draft(self):
+        from .ai_translation import next_draft
+        next_draft(self)
+
+    def ai_project_settings(self):
+        if self.pages_service:self.window().show_glossary()
+
+    def refresh_ai_tasks(self):
+        if not hasattr(self, "ai_task_list"):
+            return
+        self.ai_task_list.clear()
+        if self.pages_service:
+            for row in self.pages_service.connection.execute("SELECT * FROM tasks WHERE kind='AI_TRANSLATION' ORDER BY created_at DESC"):
+                item = QListWidgetItem(self.language.tr("ai.task_row", status=self.language.tr("ai.task_"+row["status"]), done=row["completed_units"], total=row["total_units"]))
+                item.setData(Qt.ItemDataRole.UserRole, row["id"])
+                self.ai_task_list.addItem(item)
+
     def ocr_all_pages(self) -> None:
         self._start_ocr([page["id"] for page in self.model.pages])
 
@@ -1623,10 +1820,12 @@ class Workspace(QWidget):
                               self.language.tr("dialog.word_imported", **report)), "status.word_import")
 
     def _start_export(self, ids: list[str] | None = None, task_id: str | None = None) -> None:
-        fmt, accepted = QInputDialog.getItem(self, self.language.tr("action.export_all"),
-                                             self.language.tr("dialog.export_format"), ["png", "jpg", "webp"], 0, False)
-        if not accepted:
+        from .transfer_dialogs import ExportOptionsDialog
+        count = len(ids) if ids else TaskService(self.pages_service.connection).summary(task_id)["total"]
+        dialog = ExportOptionsDialog(self.project, count, self.language, self)
+        if not exec_dialog(dialog):
             return
+        fmt = dialog.format.currentText()
         project = self.project
         def finished(result):
             message = self.language.tr("dialog.export_finished", status=result["status"],
@@ -1676,23 +1875,13 @@ class Workspace(QWidget):
         self.run_job(operation, self.confirm_import, "status.scanning")
 
     def confirm_import(self, preview: ImportPreview) -> None:
-        dialog = QMessageBox(self)
-        dialog.setWindowTitle(self.language.tr("dialog.import_preview"))
-        dialog.setText(self.language.tr("dialog.import_summary", found=len(preview.candidates), ignored=preview.ignored,
-                                         broken=len(preview.errors), duplicates=preview.duplicates))
-        if preview.errors:
-            dialog.setDetailedText("\n".join(preview.errors))
-        skip = dialog.addButton(self.language.tr("dialog.skip_duplicates"), QMessageBox.ButtonRole.AcceptRole)
-        anyway = dialog.addButton(self.language.tr("dialog.import_anyway"), QMessageBox.ButtonRole.ActionRole) if preview.duplicates else None
-        cancel = dialog.addButton(QMessageBox.StandardButton.Cancel)
-        cancel.setText(self.language.tr("dialog.cancel"))
-        dialog.setDefaultButton(skip)
-        dialog.exec()
-        clicked = dialog.clickedButton()
-        if clicked != skip and (anyway is None or clicked != anyway):
+        from .transfer_dialogs import ImportPreviewDialog
+        dialog = ImportPreviewDialog(preview, self.language, self)
+        if not exec_dialog(dialog):
             return
+        include_duplicates = dialog.include_duplicates
         importer = ImageImporter(self.project)
-        self.run_job(lambda progress, cancel: importer.commit(preview, clicked == anyway, progress, cancel),
+        self.run_job(lambda progress, cancel: importer.commit(preview, include_duplicates, progress, cancel),
                      self.import_finished, "status.importing")
 
     def import_finished(self, count: int) -> None:

@@ -1,5 +1,5 @@
 """Initial project database schema."""
-VERSION = 4
+VERSION = 6
 
 DDL = """
 CREATE TABLE projects (
@@ -57,19 +57,24 @@ CREATE TABLE translations (
  id TEXT PRIMARY KEY, text_block_id TEXT NOT NULL REFERENCES text_blocks(id),
  language TEXT NOT NULL, text TEXT NOT NULL DEFAULT '', notes TEXT NOT NULL DEFAULT '',
  status TEXT NOT NULL DEFAULT 'pending', source TEXT NOT NULL DEFAULT 'manual',
- revision INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL, UNIQUE(text_block_id,language)
+ revision INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL,
+ provider_profile_id TEXT, provider TEXT, model TEXT, prompt_version TEXT,
+ created_at TEXT NOT NULL DEFAULT '', UNIQUE(text_block_id,language)
 );
 CREATE TABLE tasks (
  id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), kind TEXT NOT NULL,
  batch_id TEXT REFERENCES batches(id), status TEXT NOT NULL DEFAULT 'pending',
  total_units INTEGER NOT NULL DEFAULT 0, completed_units INTEGER NOT NULL DEFAULT 0,
  attempts INTEGER NOT NULL DEFAULT 0, max_attempts INTEGER NOT NULL DEFAULT 3,
- last_error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+ last_error TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ options_json TEXT NOT NULL DEFAULT '{}'
 );
 CREATE TABLE task_items (
  id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(id), page_id TEXT REFERENCES pages(id),
  status TEXT NOT NULL DEFAULT 'pending', attempts INTEGER NOT NULL DEFAULT 0,
- last_error TEXT, started_at TEXT, finished_at TEXT, UNIQUE(task_id,page_id)
+ last_error TEXT, started_at TEXT, finished_at TEXT,
+ usage_json TEXT NOT NULL DEFAULT '{}', duration_ms INTEGER NOT NULL DEFAULT 0,
+ UNIQUE(task_id,page_id)
 );
 CREATE TABLE history (
  id TEXT PRIMARY KEY, project_id TEXT NOT NULL REFERENCES projects(id), command_type TEXT NOT NULL,
@@ -97,3 +102,5 @@ CREATE INDEX idx_pages_order ON pages(project_id,display_order);
 CREATE INDEX idx_task_items_status ON task_items(task_id,status);
 CREATE INDEX idx_ocr_runs_page ON ocr_runs(page_id,created_at);
 """
+from app.translation.schema import AI_DDL
+DDL += AI_DDL

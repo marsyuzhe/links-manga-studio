@@ -5,9 +5,10 @@ import json
 from PySide6.QtCore import Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (QComboBox, QDialog, QDoubleSpinBox, QFormLayout, QHBoxLayout,
-                              QLabel, QLineEdit, QPushButton, QSpinBox, QVBoxLayout)
+                              QLabel, QLineEdit, QPushButton, QSpinBox)
 
 from app.styles.project_styles import ProjectStyleService, ROLES
+from .components import dialog_layout
 
 
 class ProjectStylesDialog(QDialog):
@@ -20,14 +21,14 @@ class ProjectStylesDialog(QDialog):
         self.browse_font = browse_font
         self.setWindowTitle(self.tr_text("style.project_title"))
         self.resize(520, 430)
-        layout = QVBoxLayout(self)
+        layout = dialog_layout(self)
         self.role = QComboBox()
         for role in ROLES:
             self.role.addItem(self.tr_text("style.role_" + role), role)
         layout.addWidget(self.role)
         self.sample = QLabel(self.tr_text("style.sample"))
         self.sample.setMinimumHeight(110)
-        self.sample.setStyleSheet("background:#f9f8f4; color:#111; border-radius:10px; padding:14px")
+        self.sample.setProperty("role", "stylePreview")
         layout.addWidget(self.sample)
         form = QFormLayout()
         self.font = QLineEdit()
@@ -46,7 +47,7 @@ class ProjectStylesDialog(QDialog):
         self.color = QLineEdit()
         self.alignment = QComboBox()
         for key in ("left", "center", "right"):
-            self.alignment.addItem(self.tr_text("style.align_" + key), key)
+            self.alignment.addItem(self.tr_text("style." + key), key)
         self.line_spacing = QDoubleSpinBox()
         self.line_spacing.setRange(.5, 3)
         self.line_spacing.setSingleStep(.05)
@@ -59,7 +60,11 @@ class ProjectStylesDialog(QDialog):
         layout.addLayout(form)
         self.apply_button = QPushButton(self.tr_text("style.apply_project"))
         self.apply_button.clicked.connect(self.apply)
-        layout.addWidget(self.apply_button)
+        self.apply_button.setProperty("variant", "primary")
+        footer = QHBoxLayout()
+        footer.addStretch(1)
+        footer.addWidget(self.apply_button)
+        layout.addLayout(footer)
         self.feedback = QLabel()
         layout.addWidget(self.feedback)
         self.role.currentIndexChanged.connect(self.load_role)

@@ -78,6 +78,7 @@ def overlap(a: list[float], b: list[float]) -> float:
 
 
 class OCRPipeline:
+    """Persist raw OCR and match reruns without replacing translated block identities."""
     def __init__(self, connection: sqlite3.Connection, project: Path, backend: OCRBackend | None = None) -> None:
         self.db = connection
         self.project = project
@@ -127,6 +128,7 @@ class OCRPipeline:
                               if row["id"] not in used]
                 score, matched = max(candidates, key=lambda pair: pair[0], default=(0, None))
                 if score >= .5 and matched is not None:
+                    # Keep the matched row/UID so its translation and Word references survive a rerun.
                     used.add(matched["id"])
                     self.db.execute("""UPDATE text_blocks SET sequence=?,reading_order=?,bbox_json=?,polygon_json=?,
                         source_text=?,ocr_confidence=?,revision=revision+1 WHERE id=?""",

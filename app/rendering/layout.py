@@ -32,6 +32,7 @@ def _font(style: dict, size: int) -> QFont:
 
 
 def wrap_chinese(text: str, metrics: QFontMetrics, width: float) -> list[str]:
+    """Wrap measured glyphs while keeping opening/closing punctuation off forbidden line edges."""
     width = max(1, width)
     lines: list[str] = []
     for paragraph in text.split("\n"):
@@ -60,6 +61,7 @@ def wrap_chinese(text: str, metrics: QFontMetrics, width: float) -> list[str]:
 
 
 def fit_layout(text: str, style: dict, box_width: float, box_height: float) -> LayoutResult:
+    """Choose a bounded font size for the padded box; return overflow rather than shrinking indefinitely."""
     pad = float(style.get("padding", 8))
     top = float(style.get("padding_top", pad))
     right = float(style.get("padding_right", pad))

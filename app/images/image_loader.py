@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from PySide6.QtCore import QSize, Qt
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QImage, QImageReader
 
 MAX_PIXELS = 64_000_000

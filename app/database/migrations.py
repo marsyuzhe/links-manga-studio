@@ -6,6 +6,8 @@ from .schema import DDL, VERSION
 
 
 def migrate(connection, path: Path) -> None:
+    """Upgrade in order after backup; preserve historical steps for existing projects."""
+    # COMPATIBILITY: old projects enter at different versions; do not collapse these steps into fresh DDL.
     current = connection.execute("PRAGMA user_version").fetchone()[0]
     if current > VERSION:
         raise RuntimeError(f"Project database version {current} is newer than app version {VERSION}")
@@ -69,3 +71,51 @@ def migrate(connection, path: Path) -> None:
                 UNIQUE(project_id,role))""")
             connection.execute("UPDATE projects SET schema_version=4")
             connection.execute("PRAGMA user_version=4")
+        current = 4
+    if current < 5:
+        from app.translation.schema import AI_DDL_V5 as AI_DDL
+        backup_root = path.parent / "backups"
+        backup_root.mkdir(exist_ok=True)
+        backup = sqlite3.connect(backup_root / f"before-schema-v5-{uuid.uuid4().hex[:8]}.sqlite3")
+        try:
+            connection.backup(backup)
+        finally:
+            backup.close()
+        with connection:
+            columns = {r[1] for r in connection.execute("PRAGMA table_info(translations)")}
+            for name in ("provider_profile_id", "provider", "model", "prompt_version"):
+                if name not in columns:
+                    connection.execute(f"ALTER TABLE translations ADD COLUMN {name} TEXT")
+            if "created_at" not in columns:
+                connection.execute("ALTER TABLE translations ADD COLUMN created_at TEXT NOT NULL DEFAULT ''")
+            connection.execute("UPDATE translations SET created_at=updated_at,status=CASE WHEN trim(text)='' THEN 'empty' WHEN status='reviewed' THEN 'reviewed' ELSE 'human_edited' END")
+            for table, name, definition in (("tasks", "options_json", "TEXT NOT NULL DEFAULT '{}'"),
+                    ("task_items", "usage_json", "TEXT NOT NULL DEFAULT '{}'"),
+                    ("task_items", "duration_ms", "INTEGER NOT NULL DEFAULT 0")):
+                if name not in {r[1] for r in connection.execute(f"PRAGMA table_info({table})")}:
+                    connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
+            for statement in AI_DDL.split(';'):
+                if statement.strip():
+                    connection.execute(statement.replace("CREATE TABLE ", "CREATE TABLE IF NOT EXISTS "))
+            connection.execute("UPDATE projects SET schema_version=5")
+            connection.execute("PRAGMA user_version=5")
+
+    if current < 6:
+        backup_root = path.parent / "backups"
+        backup_root.mkdir(exist_ok=True)
+        backup = sqlite3.connect(backup_root / f"before-schema-v6-{uuid.uuid4().hex[:8]}.sqlite3")
+        try:
+            connection.backup(backup)
+        finally:
+            backup.close()
+        with connection:
+            for table, name, definition in (("glossary", "category", "TEXT NOT NULL DEFAULT 'other'"),
+                    ("glossary", "updated_at", "TEXT NOT NULL DEFAULT ''"),
+                    ("character_notes", "note", "TEXT NOT NULL DEFAULT ''")):
+                if name not in {r[1] for r in connection.execute(f"PRAGMA table_info({table})")}:
+                    connection.execute(f"ALTER TABLE {table} ADD COLUMN {name} {definition}")
+            from app.translation.schema import AI_DDL
+            statement = next(s for s in AI_DDL.split(';') if 'CREATE TABLE translation_requests' in s)
+            connection.execute(statement.replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS '))
+            connection.execute("UPDATE projects SET schema_version=6")
+            connection.execute("PRAGMA user_version=6")

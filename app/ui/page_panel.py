@@ -1,9 +1,10 @@
 """Virtual page list with bounded thumbnail pixmaps."""
 from collections import OrderedDict
 from PySide6.QtCore import QAbstractListModel, QModelIndex, QRect, QSize, Qt
-from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPixmap
+from PySide6.QtGui import QColor, QFont, QImage, QPainter, QPixmap, QPen
 from PySide6.QtWidgets import QStyle, QStyledItemDelegate
 from app.themes import DARK
+from .interaction import keyboard_focus
 
 
 class PageRowDelegate(QStyledItemDelegate):
@@ -22,7 +23,12 @@ class PageRowDelegate(QStyledItemDelegate):
         tokens = self.tokens
         painter.fillRect(rect, QColor(tokens["selected_bg"] if selected else tokens["hover_bg"] if hover else tokens["panel_bg"]))
         if selected:
-            painter.fillRect(QRect(rect.x(), rect.y()+5, 3, rect.height()-10), QColor(tokens["accent"]))
+            painter.setPen(QPen(QColor(tokens["selected_border"]),1))
+            painter.drawRect(rect.adjusted(2,2,-3,-3))
+            painter.fillRect(QRect(rect.x(), rect.y()+5, 2, rect.height()-10), QColor(tokens["accent"]))
+        if option.state & QStyle.StateFlag.State_HasFocus and keyboard_focus(self.parent()):
+            painter.setPen(QPen(QColor(tokens["focus_ring"]),1))
+            painter.drawRect(rect.adjusted(5,5,-6,-6))
         pixmap = index.model().data(index, Qt.ItemDataRole.DecorationRole)
         thumb = QRect(rect.x()+12, rect.y()+7, 59, rect.height()-14)
         painter.fillRect(thumb, QColor(tokens["page_placeholder"]))
@@ -58,7 +64,7 @@ class PageRowDelegate(QStyledItemDelegate):
         painter.restore()
 
     def sizeHint(self, option, index):
-        return QSize(230, 94)
+        return QSize(240, 104)
 
 
 class PageListModel(QAbstractListModel):
@@ -116,9 +122,9 @@ class PageListModel(QAbstractListModel):
                 return pixmap
             return self.placeholder
         if role == Qt.ItemDataRole.SizeHintRole:
-            return QSize(240, 100)
+            return QSize(240, 104)
         if role == Qt.ItemDataRole.ToolTipRole:
-            return f"{page['filename']}\n{page['path']}"
+            return None
         return None
 
     def thumbnail_ready(self, page_id: str, image: QImage | None, status: str) -> None:

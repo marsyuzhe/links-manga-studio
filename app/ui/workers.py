@@ -14,6 +14,7 @@ from app.rendering.renderer import PageRenderer
 
 
 class Job(QThread):
+    """Run one operation and deliver Qt signals; the UI owner handles disposal after finished."""
     result = Signal(object)
     error = Signal(str)
     progress = Signal(int, int, str)
@@ -59,6 +60,7 @@ class ImageWorker:
             self._condition.notify()
 
     def stop(self) -> None:
+        # Join before project closure so no decoder can outlive its source/database owner.
         with self._condition:
             self._stopped = True
             self._queue.clear()

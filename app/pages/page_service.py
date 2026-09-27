@@ -8,6 +8,7 @@ from app.importers.image_importer import sha256
 
 
 class PageService:
+    """Own page metadata edits; display order may change while page_uid remains permanent."""
     def __init__(self, connection: sqlite3.Connection, project: Path) -> None:
         self.connection = connection
         self.project = project

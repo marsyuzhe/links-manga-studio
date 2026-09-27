@@ -39,6 +39,7 @@ def bookmark(paragraph, name: str, number: int) -> None:
 
 
 class WordExchange:
+    """Own DOCX exchange records; page order and translated display headings are not IDs."""
     def __init__(self, connection: sqlite3.Connection, project: Path) -> None:
         self.db = connection
         self.project = project

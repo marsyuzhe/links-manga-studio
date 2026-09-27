@@ -12,6 +12,7 @@ class BlockItem(QGraphicsRectItem):
         self.block_id = block_id
         self.canvas = canvas
         self.erased = erased
+        self._hovered = False
         self.setPen(QPen(QColor(canvas.tokens["warning"] if erased else canvas.tokens["overlay_idle"]), 1))
         self.setToolTip(block_id)
         self.setZValue(2)
@@ -29,8 +30,8 @@ class BlockItem(QGraphicsRectItem):
 
     def paint(self, painter, option, widget=None) -> None:
         tokens = self.canvas.tokens
-        painter.setPen(QPen(QColor(tokens["warning"] if self.erased else tokens["overlay_selected"]) if self.isSelected()
-                            else QColor(tokens["warning"] if self.erased else tokens["overlay_idle"]), 2 if self.isSelected() else 1))
+        painter.setPen(QPen(QColor(tokens["overlay_selected"]) if self.isSelected()
+                            else QColor(tokens["border_strong"] if self._hovered else tokens["overlay_idle"]), 2 if self.isSelected() else 1))
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawRect(self.rect())
         if self.isSelected():
@@ -43,6 +44,16 @@ class BlockItem(QGraphicsRectItem):
                         painter.drawRect(QRectF(x-3, y-3, 6, 6))
             painter.setBrush(QColor(tokens["warning"]))
             painter.drawEllipse(QRectF(rect.center().x()-4, rect.top()-15, 8, 8))
+
+    def hoverEnterEvent(self, event) -> None:
+        self._hovered = True
+        self.update()
+        super().hoverEnterEvent(event)
+
+    def hoverLeaveEvent(self, event) -> None:
+        self._hovered = False
+        self.update()
+        super().hoverLeaveEvent(event)
 
     def hoverMoveEvent(self, event) -> None:
         rect = self.rect()
@@ -146,6 +157,10 @@ class ComicCanvas(QGraphicsView):
     def set_theme(self, tokens) -> None:
         self.tokens = tokens
         self.setBackgroundBrush(QColor(tokens["canvas_bg"]))
+        if self._has_image and hasattr(self,"page_border"):
+            pen=QPen(QColor(tokens["panel_border"]),1)
+            pen.setCosmetic(True)
+            self.page_border.setPen(pen)
         self.viewport().update()
 
     def message(self, text: str) -> None:
@@ -164,11 +179,15 @@ class ComicCanvas(QGraphicsView):
         self.scene().clear()
         self.block_items.clear()
         shade = QColor(self.tokens["shadow"])
-        shade.setAlpha(95)
+        shade.setAlpha(38)
         shadow = self.scene().addRect(5, 6, image.width(), image.height(),
                                       QPen(Qt.PenStyle.NoPen), shade)
         shadow.setZValue(-1)
         self.scene().addPixmap(QPixmap.fromImage(image))
+        page_pen=QPen(QColor(self.tokens["panel_border"]),1)
+        page_pen.setCosmetic(True)
+        self.page_border=self.scene().addRect(0,0,image.width(),image.height(),page_pen)
+        self.page_border.setZValue(1)
         self.scene().setSceneRect(0, 0, image.width(), image.height())
         self._has_image = True
         self.page_id = page_id

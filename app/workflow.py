@@ -41,7 +41,8 @@ class WorkflowService:
             raise ValueError("Please enter a translation first")
         review = TextBlockService(self.db)
         previous = review.translation(block_id)
-        review.save_translation(block_id, text, previous["notes"] if previous else "")
+        if not previous or previous["text"] != text:
+            review.save_translation(block_id, text, previous["notes"] if previous else "")
 
     def restore_erase(self, block_id: str) -> None:
         history = HistoryService(self.db)
@@ -73,12 +74,13 @@ class WorkflowService:
             history.record("text_blocks", block_id, before_block, "erase_and_refill", group_id)
             timestamp = datetime.now(timezone.utc).isoformat()
             if previous:
-                self.db.execute("""UPDATE translations SET text=?,status='translated',revision=revision+1,
-                    updated_at=? WHERE id=?""", (text, timestamp, translation_id))
+                status = previous["status"] if previous["text"] == text else "human_edited"
+                self.db.execute("""UPDATE translations SET text=?,status=?,revision=revision+1,
+                    updated_at=? WHERE id=?""", (text, status, timestamp, translation_id))
             else:
                 self.db.execute("""INSERT INTO translations
-                    (id,text_block_id,language,text,notes,status,updated_at) VALUES(?,?,'zh_CN',?,'','translated',?)""",
-                    (translation_id, block_id, text, timestamp))
+                    (id,text_block_id,language,text,notes,status,updated_at,created_at) VALUES(?,?,'zh_CN',?,'','human_edited',?,?)""",
+                    (translation_id, block_id, text, timestamp, timestamp))
             history.record("translations", translation_id, before_translation, "erase_and_refill", group_id)
 
     def export_source(self, page_ids: list[str], destination: Path) -> int:

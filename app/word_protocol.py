@@ -1,4 +1,4 @@
-"""Stable DOCX field identifiers reserved for the document phase."""
+"""Stable DOCX field identifiers; translated headings must never define the protocol."""
 
 PROTOCOL_VERSION = "1.0"
 TEXT_ID = "LMW_TEXT_ID"

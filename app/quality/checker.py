@@ -26,7 +26,7 @@ class QualityChecker:
     def scan(self, progress=lambda *args: None, cancel=None) -> dict:
         pages = [dict(row) for row in self.db.execute("SELECT id,page_uid,width,height FROM pages WHERE deleted_at IS NULL ORDER BY display_order")]
         rows = [dict(row) for row in self.db.execute("""SELECT t.*,p.page_uid,p.width AS page_width,p.height AS page_height,
-            x.text AS translation,s.settings_json AS legacy_settings
+            x.text AS translation,x.status AS translation_status,s.settings_json AS legacy_settings
             FROM text_blocks t JOIN pages p ON p.id=t.page_id
             LEFT JOIN translations x ON x.text_block_id=t.id AND x.language='zh_CN'
             LEFT JOIN styles s ON s.id=t.style_id WHERE t.active=1 AND p.deleted_at IS NULL
@@ -54,6 +54,8 @@ class QualityChecker:
             translation = (row["translation"] or "").strip()
             if not translation:
                 add(row, "warning", "translation_empty")
+            if row["translation_status"] == "ai_draft":
+                add(row, "warning", "ai_draft_unreviewed")
             if translation and row["typeset_status"] != "ready":
                 add(row, "warning", "not_typeset")
             if row["erase_status"] == "erased" and not translation:

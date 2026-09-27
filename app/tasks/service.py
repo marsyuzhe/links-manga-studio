@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import sqlite3
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Callable
 
 
-KINDS = {"pdf_render", "thumbnail", "ocr", "word_export", "word_import", "final_render", "final_export"}
+KINDS = {"pdf_render", "thumbnail", "ocr", "word_export", "word_import", "final_render", "final_export", "AI_TRANSLATION"}
 STATUSES = {"pending", "running", "paused", "completed", "failed", "interrupted", "cancel_requested", "cancelled"}
 
 
@@ -19,7 +20,8 @@ class TaskService:
     def __init__(self, connection: sqlite3.Connection) -> None:
         self.db = connection
 
-    def create(self, kind: str, page_ids: list[str], batch_id: str | None = None, max_attempts: int = 3) -> str:
+    def create(self, kind: str, page_ids: list[str], batch_id: str | None = None, max_attempts: int = 3,
+               options: dict | None = None) -> str:
         if kind not in KINDS or not page_ids or len(set(page_ids)) != len(page_ids) or max_attempts < 1:
             raise ValueError("Invalid task kind, pages or retry limit")
         project_id = self.db.execute("SELECT id FROM projects").fetchone()[0]
@@ -34,6 +36,8 @@ class TaskService:
                                                 max_attempts, timestamp, timestamp))
             self.db.executemany("INSERT INTO task_items(id,task_id,page_id) VALUES(?,?,?)",
                                 [(str(uuid.uuid4()), task_id, page_id) for page_id in page_ids])
+            if options is not None:
+                self.db.execute("UPDATE tasks SET options_json=? WHERE id=?", (json.dumps(options), task_id))
         return task_id
 
     def recover_interrupted(self) -> int:

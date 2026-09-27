@@ -86,13 +86,13 @@ class TextBlockService:
         with self.db:
             if existing:
                 self.db.execute("""UPDATE translations SET text=?,notes=?,status=?,revision=revision+1,
-                    updated_at=? WHERE id=?""", (text, notes, "translated" if text.strip() else "pending",
+                    updated_at=? WHERE id=?""", (text, notes, "human_edited" if text.strip() else "empty",
                                                timestamp, existing["id"]))
             else:
                 self.db.execute("""INSERT INTO translations
-                    (id,text_block_id,language,text,notes,status,updated_at) VALUES(?,?,?,?,?,?,?)""",
+                    (id,text_block_id,language,text,notes,status,updated_at,created_at) VALUES(?,?,?,?,?,?,?,?)""",
                     (translation_id, block_id, language, text, notes,
-                     "translated" if text.strip() else "pending", timestamp))
+                     "human_edited" if text.strip() else "empty", timestamp, timestamp))
             self.db.execute("UPDATE text_blocks SET typeset_status=? WHERE id=?",
                             ("ready" if text.strip() else "pending", block_id))
             history.record("translations", translation_id, before, "translation")

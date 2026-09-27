@@ -7,6 +7,7 @@ from pathlib import Path
 
 
 def config_dir() -> Path:
+    # COMPATIBILITY: keep the legacy directory name so existing user preferences survive rebranding.
     root = Path(os.environ.get("LMW_CONFIG_DIR", Path(os.environ.get("APPDATA", Path.home())) / "LinksMangaWorkspace"))
     root.mkdir(parents=True, exist_ok=True)
     return root

@@ -4,9 +4,10 @@ from __future__ import annotations
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QHBoxLayout, QLabel,
-                              QLineEdit, QListWidget, QListWidgetItem, QPushButton, QVBoxLayout)
+                              QLineEdit, QListWidget, QListWidgetItem, QPushButton)
 
 from app.rendering.fonts import FontPreferences
+from .components import dialog_layout, localize_buttons
 
 
 class FontPicker(QDialog):
@@ -24,7 +25,7 @@ class FontPicker(QDialog):
         self.recommendations = recommendations or []
         self.preferences = FontPreferences(config) if config else None
         self.sample = (sample or self.tr_text("font.sample"))[:80]
-        layout = QVBoxLayout(self)
+        layout = dialog_layout(self)
         self.disclaimer = QLabel(self.tr_text("font.recommend_disclaimer"))
         self.disclaimer.setWordWrap(True)
         layout.addWidget(self.disclaimer)
@@ -49,6 +50,8 @@ class FontPicker(QDialog):
         self.favorite_button.clicked.connect(self.toggle_favorite)
         layout.addWidget(self.favorite_button)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        if language:
+            localize_buttons(buttons, language.tr)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
@@ -85,7 +88,7 @@ class FontPicker(QDialog):
             item = QListWidgetItem(f"{marker}{family}{match}\n{self.sample}")
             item.setData(Qt.ItemDataRole.UserRole, family)
             item.setFont(QFont(family, 12))
-            item.setToolTip(record.get("file_path", family))
+            item.setToolTip(family)
             self.list.addItem(item)
             if family == current:
                 self.list.setCurrentItem(item)

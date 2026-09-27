@@ -5,7 +5,7 @@ import numpy as np
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (QDialog, QDialogButtonBox, QGraphicsScene, QGraphicsView,
-                              QHBoxLayout, QPushButton, QSpinBox, QVBoxLayout)
+                              QHBoxLayout, QPushButton, QSpinBox)
 
 
 class MaskView(QGraphicsView):
@@ -85,16 +85,21 @@ class MaskView(QGraphicsView):
         event.accept()
 
 
+from .components import dialog_layout, localize_buttons
+
+
 class MaskDialog(QDialog):
     def __init__(self, source: QImage, mask: QImage | None = None, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Mask Editor")
+        language = getattr(parent, "language", None)
+        tr = language.tr if language else lambda key: {"mask.title": "Mask Editor", "mask.brush": "Brush", "mask.erase": "Erase"}.get(key, key)
+        self.setWindowTitle(tr("mask.title"))
         self.resize(900, 700)
         self.view = MaskView(source, mask)
-        layout = QVBoxLayout(self)
+        layout = dialog_layout(self)
         toolbar = QHBoxLayout()
-        brush = QPushButton("Brush")
-        erase = QPushButton("Erase")
+        brush = QPushButton(tr("mask.brush"))
+        erase = QPushButton(tr("mask.erase"))
         brush.clicked.connect(lambda: setattr(self.view, "mode", "brush"))
         erase.clicked.connect(lambda: setattr(self.view, "mode", "erase"))
         size = QSpinBox()
@@ -106,6 +111,8 @@ class MaskDialog(QDialog):
         layout.addLayout(toolbar)
         layout.addWidget(self.view)
         buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel)
+        if language:
+            localize_buttons(buttons, tr)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)

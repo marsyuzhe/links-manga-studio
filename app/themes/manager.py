@@ -41,6 +41,8 @@ class ThemeManager:
     def apply(self) -> None:
         app = QApplication.instance()
         if app:
+            from app.ui.interaction import install_interactions
+            install_interactions(app, self.tokens)
             app.setStyleSheet(stylesheet(self.tokens))
 
     def set_mode(self, mode: str) -> None:

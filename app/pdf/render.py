@@ -25,6 +25,7 @@ def render_to_page(value: float, page_extent: float, render_extent: int) -> floa
 
 
 class PdfRenderService:
+    """Render requested PDF pages only; source page indices and page coordinates stay unchanged."""
     def __init__(self, project: Path) -> None:
         self.root = project / "cache" / "pdf_render"
 

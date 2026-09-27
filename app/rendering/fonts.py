@@ -7,6 +7,7 @@ from pathlib import Path
 
 
 class FontCatalog:
+    """Cache installed font metadata; callers request scanning only for font/quality tools."""
     def __init__(self, cache_path: Path, fonts_dir: Path = Path("C:/Windows/Fonts")) -> None:
         self.cache_path = cache_path
         self.fonts_dir = fonts_dir
@@ -55,6 +56,7 @@ class FontCatalog:
         paths = sorted((p for p in self.fonts_dir.iterdir() if p.suffix.lower() in
                         (".ttf", ".otf", ".ttc")), key=lambda p: p.name.casefold())
         fingerprint = [[p.name, p.stat().st_size, p.stat().st_mtime_ns] for p in paths]
+        # Cheap file metadata validates the cache before opening font tables or checking glyph coverage.
         path = self.cache_path.with_name("font_metadata.json")
         try:
             cached = json.loads(path.read_text(encoding="utf-8"))

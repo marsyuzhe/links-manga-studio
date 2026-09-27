@@ -1,9 +1,9 @@
 """Task-oriented settings navigator for existing local preferences and tools."""
-from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (QCheckBox, QComboBox, QDialog, QFormLayout, QHBoxLayout, QLabel,
                               QListWidget, QPushButton, QSpinBox, QStackedWidget, QVBoxLayout, QWidget)
 
 from .components import SectionHeader
+from .translation_settings import TranslationSettings
 
 
 class SettingsDialog(QDialog):
@@ -14,7 +14,7 @@ class SettingsDialog(QDialog):
         self.setWindowTitle("设置" if zh else "Settings")
         self.resize(780, 520)
         outer = QHBoxLayout(self)
-        outer.setContentsMargins(12, 12, 12, 12)
+        outer.setContentsMargins(16, 16, 16, 16)
         outer.setSpacing(16)
         self.navigation = QListWidget()
         self.navigation.setFixedWidth(160)
@@ -23,7 +23,7 @@ class SettingsDialog(QDialog):
         outer.addWidget(self.pages, 1)
         self.sections = (("常规", "General"), ("外观", "Appearance"), ("OCR", "OCR"),
                     ("翻译", "Translation"), ("排版", "Typesetting"),
-                    ("导出", "Export"), ("高级", "Advanced"), ("关于", "About"))
+                    ("导出", "Export"), ("高级", "Advanced"))
         self.section_headers = []
         for cn, en in self.sections:
             title = cn if zh else en
@@ -78,7 +78,9 @@ class SettingsDialog(QDialog):
         translation = self.pages.widget(3).layout()
         self.translation_hint = QLabel("译文会在输入停顿后自动保存。" if zh else
                                        "Translations save automatically after typing pauses.")
-        translation.insertWidget(1, self.translation_hint)
+        self.translation_hint.hide()
+        self.translation_settings = TranslationSettings(window, self)
+        translation.insertWidget(1, self.translation_settings)
         typesetting = self.pages.widget(4).layout()
         self.styles_button = self._button(typesetting, "项目文字样式" if zh else "Project text styles", window.workspace.show_project_styles)
         export = self.pages.widget(5).layout()
@@ -88,13 +90,13 @@ class SettingsDialog(QDialog):
         advanced = self.pages.widget(6).layout()
         self.diagnostics_button = self._button(advanced, "环境诊断" if zh else "Diagnostics", window.show_diagnostics)
         self.logs_button = self._button(advanced, "打开日志文件夹" if zh else "Open log folder", window.open_log_action.trigger)
-        about = self.pages.widget(7).layout()
-        from app.branding import DISPLAY_NAME, AUTHOR_EN
-        about.insertWidget(1, QLabel(f"{DISPLAY_NAME} · {AUTHOR_EN}"))
-        self.about_button = self._button(about, "查看关于" if zh else "Open About", window.show_about)
         window.language.changed.connect(self.retranslate)
 
     def retranslate(self, *_args) -> None:
+        old = self.translation_settings
+        self.translation_settings = TranslationSettings(self.host, self)
+        self.pages.widget(3).layout().replaceWidget(old, self.translation_settings)
+        old.deleteLater()
         zh = self.host.language.language == "zh_CN"
         self.setWindowTitle("设置" if zh else "Settings")
         for index, ((cn, en), header) in enumerate(zip(self.sections, self.section_headers)):
@@ -117,7 +119,6 @@ class SettingsDialog(QDialog):
                                  "Images are exported into the current project's exports folder.")
         self.diagnostics_button.setText("环境诊断" if zh else "Diagnostics")
         self.logs_button.setText("打开日志文件夹" if zh else "Open log folder")
-        self.about_button.setText("查看关于" if zh else "Open About")
 
     def _button(self, layout, text, handler):
         button = QPushButton(text)

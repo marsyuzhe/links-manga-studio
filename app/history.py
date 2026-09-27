@@ -9,10 +9,11 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 
-TABLES = {"text_blocks", "translations", "styles", "text_style_presets"}
+TABLES = {"text_blocks", "translations", "styles", "text_style_presets", "glossary", "character_notes"}
 
 
 class HistoryService:
+    """Record snapshots inside the caller's edit transaction, never in a later autosave."""
     def __init__(self, connection: sqlite3.Connection) -> None:
         self.db = connection
 

@@ -7,7 +7,6 @@ from pathlib import Path
 
 import cv2
 import numpy as np
-from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QFont, QFontMetrics, QImage, QPainter, QPainterPath, QPen
 
 from app.images.image_loader import ImageLoader
@@ -40,6 +39,7 @@ def fit_font(text: str, family: str, width: int, height: int, minimum: int = 8, 
 
 
 class PageRenderer:
+    """Compose an output image from immutable sources and persisted edits; never rewrite sources."""
     def __init__(self, connection: sqlite3.Connection, project: Path) -> None:
         self.db = connection
         self.project = project
